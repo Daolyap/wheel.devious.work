@@ -11,6 +11,23 @@ const centerX = canvas.width / 2;
 const centerY = canvas.height / 2;
 const radius = 240;
 
+// Spin duration constants (in milliseconds)
+const MIN_SPIN_DURATION = 300000; // 5 minutes
+const MAX_SPIN_DURATION = 600000; // 10 minutes
+
+// Speed variation constants
+const WAVE_FREQUENCY_PRIMARY = 0.05;
+const WAVE_FREQUENCY_SECONDARY = 0.1;
+const WAVE_FREQUENCY_TERTIARY = 0.03;
+const WAVE_MODULATION_FACTOR = 10;
+const PRIMARY_WEIGHT = 0.7;
+const SECONDARY_WEIGHT = 0.3;
+const PROGRESS_DAMPING = 0.3;
+const ACCELERATION_PHASE_END = 0.85;
+const BASE_SPEED_MIN = 0.03;
+const BASE_SPEED_ACCELERATION = 0.15;
+const BASE_SPEED_MAX = 0.18;
+
 // Templates
 const templates = {
     yesno: ['Yes', 'No'],
@@ -61,7 +78,7 @@ function addItem() {
     const input = document.getElementById('newItem');
     const value = input.value.trim();
     
-    if (value && !items.includes(value)) {
+    if (value && !items.some(item => item.toLowerCase() === value.toLowerCase())) {
         items.push(value);
         updateItemList();
         drawWheel();
@@ -81,10 +98,19 @@ function updateItemList() {
     
     items.forEach((item, index) => {
         const li = document.createElement('li');
-        li.innerHTML = `
-            <span>${item}</span>
-            <button class="delete-btn" onclick="removeItem(${index})">Delete</button>
-        `;
+        
+        const span = document.createElement('span');
+        span.textContent = item;
+        li.appendChild(span);
+
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'delete-btn';
+        deleteBtn.textContent = 'Delete';
+        deleteBtn.addEventListener('click', () => {
+            removeItem(index);
+        });
+        li.appendChild(deleteBtn);
+        
         list.appendChild(li);
     });
 }
@@ -159,51 +185,38 @@ function startSpin() {
     resultDiv.textContent = 'Spinning...';
     resultDiv.className = 'result-display spinning';
     
-    // The devious part: random duration between 5-10 minutes (300000-600000ms)
-    // WARNING: This creates an intentionally extended spinning experience
-    // The wheel will take 5-10 minutes to stop, which may frustrate users expecting a quick result
-    const totalDuration = 300000 + Math.random() * 300000; // 5-10 minutes
+    const totalDuration = MIN_SPIN_DURATION + Math.random() * (MAX_SPIN_DURATION - MIN_SPIN_DURATION);
     const startTime = Date.now();
     
-    // Speed parameters - this creates the devious behavior
-    let currentSpeed = 0.02; // Starting speed
+    let currentSpeed = 0.02;
     
     function animate() {
         const elapsed = Date.now() - startTime;
         const progress = elapsed / totalDuration;
         
-        // Devious speed variation pattern
-        // The wheel speeds up and slows down multiple times
-        const time = elapsed / 1000; // time in seconds
+        const time = elapsed / 1000;
         
-        // Create waves of speed ups and slow downs
-        const waveFrequency = 0.05; // How often speed changes
-        const waveAmplitude = Math.sin(time * waveFrequency) * 0.5 + 0.5; // 0 to 1
+        // Complex speed variation using multiple sine wave patterns
+        const waveAmplitude = Math.sin(time * WAVE_FREQUENCY_PRIMARY) * 0.5 + 0.5;
+        const randomBurst = Math.sin(time * WAVE_FREQUENCY_SECONDARY + Math.sin(time * WAVE_FREQUENCY_TERTIARY) * WAVE_MODULATION_FACTOR) * SECONDARY_WEIGHT + PRIMARY_WEIGHT;
+        const speedMultiplier = (waveAmplitude * PRIMARY_WEIGHT + randomBurst * SECONDARY_WEIGHT) * (1 - progress * PROGRESS_DAMPING);
         
-        // Add random speed bursts
-        const randomBurst = Math.sin(time * 0.1 + Math.sin(time * 0.03) * 10) * 0.3 + 0.7;
-        
-        // Combine different patterns for unpredictable behavior
-        const speedMultiplier = (waveAmplitude * 0.7 + randomBurst * 0.3) * (1 - progress * 0.3);
-        
-        // Base speed increases slowly over time, then decreases near the end
+        // Progressive speed adjustment throughout spin duration
         let baseSpeed;
-        if (progress < 0.85) {
-            // First 85%: generally speeding up with variations
-            baseSpeed = 0.03 + progress * 0.15;
+        if (progress < ACCELERATION_PHASE_END) {
+            baseSpeed = BASE_SPEED_MIN + progress * BASE_SPEED_ACCELERATION;
         } else {
-            // Last 15%: slowing down to stop
-            const endProgress = (progress - 0.85) / 0.15;
-            baseSpeed = 0.18 * (1 - endProgress * endProgress);
+            const endProgress = (progress - ACCELERATION_PHASE_END) / (1 - ACCELERATION_PHASE_END);
+            baseSpeed = BASE_SPEED_MAX * (1 - endProgress * endProgress);
         }
         
-        currentSpeed = baseSpeed * speedMultiplier;
+        currentSpeed = Math.max(0, baseSpeed * speedMultiplier);
         
-        // Update rotation
+        // Update rotation with periodic normalization
         rotation += currentSpeed;
+        rotation = rotation % (2 * Math.PI);
         drawWheel();
         
-        // Continue or stop
         if (elapsed < totalDuration) {
             animationFrameId = requestAnimationFrame(animate);
         } else {
@@ -223,10 +236,11 @@ function stopSpin() {
         animationFrameId = null;
     }
     
-    // Calculate winner
-    const normalizedRotation = (rotation % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI);
-    const pointerAngle = Math.PI / 2; // Pointer at top
-    const adjustedAngle = (pointerAngle - normalizedRotation + 2 * Math.PI) % (2 * Math.PI);
+    // Calculate winner based on final rotation
+    const normalizedRotation = (Math.abs(rotation) % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI);
+    const pointerAngle = Math.PI / 2;
+    const isClockwise = rotation >= 0;
+    const adjustedAngle = (pointerAngle + (isClockwise ? normalizedRotation : -normalizedRotation) + 2 * Math.PI) % (2 * Math.PI);
     const anglePerItem = (2 * Math.PI) / items.length;
     const winnerIndex = Math.floor(adjustedAngle / anglePerItem) % items.length;
     
@@ -235,5 +249,5 @@ function stopSpin() {
     resultDiv.className = 'result-display';
 }
 
-// Make removeItem available globally
-window.removeItem = removeItem;
+// Remove global window assignment as it's no longer needed
+// window.removeItem = removeItem;
