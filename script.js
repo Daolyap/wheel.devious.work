@@ -218,7 +218,6 @@ function startSpin() {
     // Hide fuel container initially
     document.getElementById('fuelContainer').classList.add('hidden');
     
-    const gearStartTime = Date.now();
     let currentSpeed = GEAR_SPEEDS[1];
     let targetSpeed = GEAR_SPEEDS[1];
     gearEntryTime = Date.now();
@@ -230,10 +229,11 @@ function startSpin() {
     function animate() {
         const now = Date.now();
         
-        // Handle gear progression
-        if (currentGear < 6 && !canShift) {
+        // Handle gear progression (only for gears 1-5, which have defined durations)
+        if (currentGear >= 1 && currentGear < 6 && !canShift) {
             const timeInGear = now - gearEntryTime;
-            if (timeInGear >= GEAR_DURATIONS[currentGear]) {
+            const gearDuration = GEAR_DURATIONS[currentGear];
+            if (gearDuration && timeInGear >= gearDuration) {
                 // Time to prompt for shift
                 canShift = true;
                 showShiftPrompt();
