@@ -212,9 +212,8 @@ function startSpin() {
         
         currentSpeed = Math.max(0, baseSpeed * speedMultiplier);
         
-        // Update rotation with periodic normalization
+        // Update rotation
         rotation += currentSpeed;
-        rotation = rotation % (2 * Math.PI);
         drawWheel();
         
         if (elapsed < totalDuration) {
@@ -237,9 +236,9 @@ function stopSpin() {
     }
     
     // Calculate winner based on final rotation
+    const isClockwise = rotation >= 0;
     const normalizedRotation = (Math.abs(rotation) % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI);
     const pointerAngle = Math.PI / 2;
-    const isClockwise = rotation >= 0;
     const adjustedAngle = (pointerAngle + (isClockwise ? normalizedRotation : -normalizedRotation) + 2 * Math.PI) % (2 * Math.PI);
     const anglePerItem = (2 * Math.PI) / items.length;
     const winnerIndex = Math.floor(adjustedAngle / anglePerItem) % items.length;
