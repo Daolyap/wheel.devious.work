@@ -160,13 +160,13 @@ function startSpin() {
     resultDiv.className = 'result-display spinning';
     
     // The devious part: random duration between 5-10 minutes (300000-600000ms)
+    // WARNING: This creates an intentionally extended spinning experience
+    // The wheel will take 5-10 minutes to stop, which may frustrate users expecting a quick result
     const totalDuration = 300000 + Math.random() * 300000; // 5-10 minutes
     const startTime = Date.now();
     
     // Speed parameters - this creates the devious behavior
     let currentSpeed = 0.02; // Starting speed
-    let acceleration = 0.0002;
-    let speedPhase = 0;
     
     function animate() {
         const elapsed = Date.now() - startTime;
@@ -225,7 +225,7 @@ function stopSpin() {
     
     // Calculate winner
     const normalizedRotation = (rotation % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI);
-    const pointerAngle = (Math.PI / 2) % (2 * Math.PI); // Pointer at top
+    const pointerAngle = Math.PI / 2; // Pointer at top
     const adjustedAngle = (pointerAngle - normalizedRotation + 2 * Math.PI) % (2 * Math.PI);
     const anglePerItem = (2 * Math.PI) / items.length;
     const winnerIndex = Math.floor(adjustedAngle / anglePerItem) % items.length;
