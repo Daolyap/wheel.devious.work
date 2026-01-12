@@ -4,6 +4,14 @@ let isSpinning = false;
 let rotation = 0;
 let animationFrameId = null;
 
+// Gear system state
+let currentGear = 0;
+let canShift = false;
+let fuelLevel = 100;
+let isFuelDepleting = false;
+let isSlowingDown = false;
+let gearEntryTime = 0;
+
 // Canvas setup
 const canvas = document.getElementById('wheelCanvas');
 const ctx = canvas.getContext('2d');
@@ -11,22 +19,32 @@ const centerX = canvas.width / 2;
 const centerY = canvas.height / 2;
 const radius = 240;
 
-// Spin duration constants (in milliseconds)
-const MIN_SPIN_DURATION = 300000; // 5 minutes
-const MAX_SPIN_DURATION = 600000; // 10 minutes
+// Gear speed constants - speeds for each gear (radians per frame)
+const GEAR_SPEEDS = {
+    0: 0,           // Not spinning
+    1: 0.015,       // Really slow start
+    2: 0.035,       // Speed up a bit
+    3: 0.06,        // Faster
+    4: 0.10,        // Getting fast
+    5: 0.16,        // Very fast
+    6: 0.28         // Really fast in 6th gear
+};
 
-// Speed variation constants
-const WAVE_FREQUENCY_PRIMARY = 0.05;
-const WAVE_FREQUENCY_SECONDARY = 0.1;
-const WAVE_FREQUENCY_TERTIARY = 0.03;
-const WAVE_MODULATION_FACTOR = 10;
-const PRIMARY_WEIGHT = 0.7;
-const SECONDARY_WEIGHT = 0.3;
-const PROGRESS_DAMPING = 0.3;
-const ACCELERATION_PHASE_END = 0.85;
-const BASE_SPEED_MIN = 0.03;
-const BASE_SPEED_ACCELERATION = 0.15;
-const BASE_SPEED_MAX = 0.18;
+// Time to spend in each gear before shift prompt (ms)
+const GEAR_DURATIONS = {
+    1: 3000,   // 3 seconds in 1st gear
+    2: 3000,   // 3 seconds in 2nd gear
+    3: 3000,   // 3 seconds in 3rd gear
+    4: 3000,   // 3 seconds in 4th gear
+    5: 3000    // 3 seconds in 5th gear
+};
+
+// Fuel depletion duration (5-10 minutes)
+const MIN_FUEL_DURATION = 300000; // 5 minutes
+const MAX_FUEL_DURATION = 600000; // 10 minutes
+
+// Slowdown constants
+const SLOWDOWN_DURATION = 30000; // 30 seconds to fully stop
 
 // Templates
 const templates = {
@@ -56,6 +74,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (e.key === 'Enter') addItem();
     });
     document.getElementById('spinBtn').addEventListener('click', startSpin);
+    document.getElementById('shiftBtn').addEventListener('click', shiftGear);
     
     // Template buttons
     document.querySelectorAll('.template-btn').forEach(btn => {
@@ -180,50 +199,146 @@ function startSpin() {
     if (isSpinning || items.length === 0) return;
     
     isSpinning = true;
+    currentGear = 1;
+    canShift = false;
+    fuelLevel = 100;
+    isFuelDepleting = false;
+    isSlowingDown = false;
+    
     document.getElementById('spinBtn').disabled = true;
     const resultDiv = document.getElementById('result');
-    resultDiv.textContent = 'Spinning...';
+    resultDiv.textContent = 'Starting...';
     resultDiv.className = 'result-display spinning';
     
-    const totalDuration = MIN_SPIN_DURATION + Math.random() * (MAX_SPIN_DURATION - MIN_SPIN_DURATION);
-    const startTime = Date.now();
+    // Show gear display
+    const gearDisplay = document.getElementById('gearDisplay');
+    gearDisplay.classList.remove('hidden');
+    updateGearDisplay();
     
-    let currentSpeed = 0.02;
+    // Hide fuel container initially
+    document.getElementById('fuelContainer').classList.add('hidden');
+    
+    const gearStartTime = Date.now();
+    let currentSpeed = GEAR_SPEEDS[1];
+    let targetSpeed = GEAR_SPEEDS[1];
+    gearEntryTime = Date.now();
+    let fuelStartTime = null;
+    let fuelDuration = MIN_FUEL_DURATION + Math.random() * (MAX_FUEL_DURATION - MIN_FUEL_DURATION);
+    let slowdownStartTime = null;
+    let speedAtSlowdownStart = 0;
     
     function animate() {
-        const elapsed = Date.now() - startTime;
-        const progress = elapsed / totalDuration;
+        const now = Date.now();
         
-        const time = elapsed / 1000;
-        
-        // Complex speed variation using multiple sine wave patterns
-        const waveAmplitude = Math.sin(time * WAVE_FREQUENCY_PRIMARY) * 0.5 + 0.5;
-        const randomBurst = Math.sin(time * WAVE_FREQUENCY_SECONDARY + Math.sin(time * WAVE_FREQUENCY_TERTIARY) * WAVE_MODULATION_FACTOR) * SECONDARY_WEIGHT + PRIMARY_WEIGHT;
-        const speedMultiplier = (waveAmplitude * PRIMARY_WEIGHT + randomBurst * SECONDARY_WEIGHT) * (1 - progress * PROGRESS_DAMPING);
-        
-        // Progressive speed adjustment throughout spin duration
-        let baseSpeed;
-        if (progress < ACCELERATION_PHASE_END) {
-            baseSpeed = BASE_SPEED_MIN + progress * BASE_SPEED_ACCELERATION;
-        } else {
-            const endProgress = (progress - ACCELERATION_PHASE_END) / (1 - ACCELERATION_PHASE_END);
-            baseSpeed = BASE_SPEED_MAX * (1 - endProgress * endProgress);
+        // Handle gear progression
+        if (currentGear < 6 && !canShift) {
+            const timeInGear = now - gearEntryTime;
+            if (timeInGear >= GEAR_DURATIONS[currentGear]) {
+                // Time to prompt for shift
+                canShift = true;
+                showShiftPrompt();
+            }
         }
         
-        currentSpeed = Math.max(0, baseSpeed * speedMultiplier);
+        // Handle fuel depletion in 6th gear
+        if (currentGear === 6 && !isSlowingDown) {
+            if (!isFuelDepleting) {
+                isFuelDepleting = true;
+                fuelStartTime = now;
+                document.getElementById('fuelContainer').classList.remove('hidden');
+            }
+            
+            const fuelElapsed = now - fuelStartTime;
+            fuelLevel = Math.max(0, 100 - (fuelElapsed / fuelDuration) * 100);
+            updateFuelBar();
+            
+            if (fuelLevel <= 0) {
+                // Start slowing down
+                isSlowingDown = true;
+                slowdownStartTime = now;
+                speedAtSlowdownStart = currentSpeed;
+                const resultDiv = document.getElementById('result');
+                resultDiv.textContent = 'Out of fuel... slowing down...';
+            }
+        }
+        
+        // Handle slowdown
+        if (isSlowingDown) {
+            const slowdownElapsed = now - slowdownStartTime;
+            const slowdownProgress = Math.min(1, slowdownElapsed / SLOWDOWN_DURATION);
+            // Use easeOutQuad for gradual slowdown
+            const easedProgress = 1 - Math.pow(1 - slowdownProgress, 2);
+            currentSpeed = speedAtSlowdownStart * (1 - easedProgress);
+            targetSpeed = currentSpeed;
+            
+            if (slowdownProgress >= 1) {
+                stopSpin();
+                return;
+            }
+        } else {
+            // Smoothly transition to target speed
+            targetSpeed = GEAR_SPEEDS[currentGear];
+            currentSpeed += (targetSpeed - currentSpeed) * 0.05;
+        }
         
         // Update rotation
         rotation += currentSpeed;
         drawWheel();
         
-        if (elapsed < totalDuration) {
-            animationFrameId = requestAnimationFrame(animate);
-        } else {
-            stopSpin();
-        }
+        animationFrameId = requestAnimationFrame(animate);
     }
     
     animate();
+}
+
+function shiftGear() {
+    if (!canShift || currentGear >= 6) return;
+    
+    currentGear++;
+    canShift = false;
+    
+    // Reset gear entry time for next gear timing
+    gearEntryTime = Date.now();
+    
+    updateGearDisplay();
+    hideShiftPrompt();
+    
+    const resultDiv = document.getElementById('result');
+    if (currentGear === 6) {
+        resultDiv.textContent = 'Maximum gear! Fuel depleting...';
+    } else {
+        resultDiv.textContent = `Shifted to gear ${currentGear}!`;
+    }
+}
+
+function showShiftPrompt() {
+    const shiftBtn = document.getElementById('shiftBtn');
+    shiftBtn.classList.remove('hidden');
+    shiftBtn.classList.add('pulse');
+}
+
+function hideShiftPrompt() {
+    const shiftBtn = document.getElementById('shiftBtn');
+    shiftBtn.classList.add('hidden');
+    shiftBtn.classList.remove('pulse');
+}
+
+function updateGearDisplay() {
+    document.getElementById('currentGear').textContent = currentGear;
+}
+
+function updateFuelBar() {
+    const fuelBar = document.getElementById('fuelBar');
+    fuelBar.style.width = `${fuelLevel}%`;
+    
+    // Change color based on fuel level
+    if (fuelLevel > 50) {
+        fuelBar.style.backgroundColor = '#27ae60';
+    } else if (fuelLevel > 25) {
+        fuelBar.style.backgroundColor = '#f39c12';
+    } else {
+        fuelBar.style.backgroundColor = '#e74c3c';
+    }
 }
 
 function stopSpin() {
@@ -234,6 +349,18 @@ function stopSpin() {
         cancelAnimationFrame(animationFrameId);
         animationFrameId = null;
     }
+    
+    // Hide gear and fuel displays
+    document.getElementById('gearDisplay').classList.add('hidden');
+    document.getElementById('fuelContainer').classList.add('hidden');
+    hideShiftPrompt();
+    
+    // Reset state
+    currentGear = 0;
+    canShift = false;
+    fuelLevel = 100;
+    isFuelDepleting = false;
+    isSlowingDown = false;
     
     // Calculate winner based on final rotation
     const isClockwise = rotation >= 0;
