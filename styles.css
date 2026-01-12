@@ -284,7 +284,7 @@ header p {
     box-shadow: 0 4px 15px rgba(231, 76, 60, 0.4);
 }
 
-.shift-button:hover {
+.shift-button:not(.pulse):hover {
     transform: scale(1.05);
     box-shadow: 0 6px 20px rgba(231, 76, 60, 0.6);
 }
@@ -341,6 +341,6 @@ header p {
     height: 100%;
     width: 100%;
     background-color: #27ae60;
-    border-radius: 12px;
+    border-radius: 12px 0 0 12px;
     transition: width 0.1s linear, background-color 0.3s ease;
 }

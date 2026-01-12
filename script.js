@@ -31,6 +31,7 @@ const GEAR_SPEEDS = {
 };
 
 // Time to spend in each gear before shift prompt (ms)
+// Note: Gear 6 is intentionally excluded - it's the maximum gear where fuel depletion begins
 const GEAR_DURATIONS = {
     1: 3000,   // 3 seconds in 1st gear
     2: 3000,   // 3 seconds in 2nd gear
@@ -233,7 +234,7 @@ function startSpin() {
         if (currentGear >= 1 && currentGear < 6 && !canShift) {
             const timeInGear = now - gearEntryTime;
             const gearDuration = GEAR_DURATIONS[currentGear];
-            if (gearDuration && timeInGear >= gearDuration) {
+            if (timeInGear >= gearDuration) {
                 // Time to prompt for shift
                 canShift = true;
                 showShiftPrompt();
@@ -266,10 +267,9 @@ function startSpin() {
         if (isSlowingDown) {
             const slowdownElapsed = now - slowdownStartTime;
             const slowdownProgress = Math.min(1, slowdownElapsed / SLOWDOWN_DURATION);
-            // Use easeOutQuad for gradual slowdown
+            // Use easeOutQuad: quick initial slowdown, then gradually easing to a stop
             const easedProgress = 1 - Math.pow(1 - slowdownProgress, 2);
             currentSpeed = speedAtSlowdownStart * (1 - easedProgress);
-            targetSpeed = currentSpeed;
             
             if (slowdownProgress >= 1) {
                 stopSpin();
@@ -277,6 +277,7 @@ function startSpin() {
             }
         } else {
             // Smoothly transition to target speed
+            // Using 0.05 easing factor for gradual acceleration feel between gears
             targetSpeed = GEAR_SPEEDS[currentGear];
             currentSpeed += (targetSpeed - currentSpeed) * 0.05;
         }
@@ -294,6 +295,10 @@ function startSpin() {
 function shiftGear() {
     if (!canShift || currentGear >= 6) return;
     
+    // Disable shift button immediately to prevent rapid clicks
+    const shiftBtn = document.getElementById('shiftBtn');
+    shiftBtn.disabled = true;
+    
     currentGear++;
     canShift = false;
     
@@ -307,8 +312,11 @@ function shiftGear() {
     if (currentGear === 6) {
         resultDiv.textContent = 'Maximum gear! Fuel depleting...';
     } else {
-        resultDiv.textContent = `Shifted to gear ${currentGear}!`;
+        resultDiv.textContent = `Gear ${currentGear} - building speed...`;
     }
+    
+    // Re-enable shift button after hiding
+    shiftBtn.disabled = false;
 }
 
 function showShiftPrompt() {
@@ -330,6 +338,7 @@ function updateGearDisplay() {
 function updateFuelBar() {
     const fuelBar = document.getElementById('fuelBar');
     fuelBar.style.width = `${fuelLevel}%`;
+    fuelBar.setAttribute('aria-valuenow', Math.round(fuelLevel));
     
     // Change color based on fuel level
     if (fuelLevel > 50) {

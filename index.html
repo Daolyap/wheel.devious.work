@@ -42,18 +42,18 @@
                 </div>
                 
                 <!-- Gear and Fuel Display -->
-                <div id="gearDisplay" class="gear-display hidden">
+                <div id="gearDisplay" class="gear-display hidden" aria-live="polite">
                     <div class="gear-indicator">
                         <span class="gear-label">GEAR</span>
-                        <span id="currentGear" class="current-gear">1</span>
+                        <span id="currentGear" class="current-gear">0</span>
                     </div>
-                    <button id="shiftBtn" class="shift-button hidden">SHIFT UP!</button>
+                    <button id="shiftBtn" class="shift-button hidden" aria-label="Shift to next gear">SHIFT UP!</button>
                 </div>
                 
                 <div id="fuelContainer" class="fuel-container hidden">
                     <div class="fuel-label">FUEL</div>
                     <div class="fuel-bar-outer">
-                        <div id="fuelBar" class="fuel-bar-inner"></div>
+                        <div id="fuelBar" class="fuel-bar-inner" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100" aria-label="Fuel level"></div>
                     </div>
                 </div>
                 
